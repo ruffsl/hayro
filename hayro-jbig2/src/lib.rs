@@ -29,6 +29,23 @@ pub struct DecoderContext {
     pub(crate) page_bitmap: Bitmap,
 }
 
+/// Settings used while decoding JBIG2 images.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodeSettings {
+    /// Upper bound on symbol instances to accept in a single text region.
+    ///
+    /// Set this to `None` to disable the limit.
+    pub max_symbol_instances: Option<u32>,
+}
+
+impl Default for DecodeSettings {
+    fn default() -> Self {
+        Self {
+            max_symbol_instances: Some(100_000),
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ScratchBuffers {
     pub(crate) contexts: Vec<ArithmeticDecoderContext>,
@@ -184,16 +201,22 @@ impl<'a> Image<'a> {
     /// Decode the image data through the given [`Decoder`].
     pub fn decode<D: Decoder>(&self, decoder: &mut D) -> Result<()> {
         let mut ctx = DecoderContext::default();
+        let settings = DecodeSettings::default();
 
-        self.decode_with(decoder, &mut ctx)
+        self.decode_with(decoder, &mut ctx, &settings)
     }
 
     /// Decode the image data through the given [`Decoder`] and [`DecoderContext`].
     ///
     /// This is useful in case you want to convert multiple JBIG2 images,
     /// as it allows `hayro-jbig2` to reuse allocations during decoding.
-    pub fn decode_with<D: Decoder>(&self, decoder: &mut D, ctx: &mut DecoderContext) -> Result<()> {
-        decode_segments(&self.segments, self.height_from_stripes, ctx)?;
+    pub fn decode_with<D: Decoder>(
+        &self,
+        decoder: &mut D,
+        ctx: &mut DecoderContext,
+        settings: &DecodeSettings,
+    ) -> Result<()> {
+        decode_segments(&self.segments, self.height_from_stripes, ctx, settings)?;
         emit_bitmap(&ctx.page_bitmap, decoder);
 
         Ok(())
@@ -261,6 +284,7 @@ fn decode_segments(
     segments: &[segment::Segment<'_>],
     height_from_stripes: Option<u32>,
     decoder_ctx: &mut DecoderContext,
+    settings: &DecodeSettings,
 ) -> Result<()> {
     // Find and parse page information segment first.
     if let Some(page_info) = segments
@@ -354,6 +378,7 @@ fn decode_segments(
                     &referred_tables,
                     &page_state.standard_tables,
                     retained_contexts,
+                    settings,
                 )?;
                 page_state.store_symbol_dictionary(seg.header.segment_number, dictionary);
             }
@@ -392,6 +417,7 @@ fn decode_segments(
                         &page_state.standard_tables,
                         page_bitmap,
                         scratch_buffers,
+                        settings,
                     )?;
                 } else {
                     let region = text::decode(
@@ -400,6 +426,7 @@ fn decode_segments(
                         &referred_tables,
                         &page_state.standard_tables,
                         scratch_buffers,
+                        settings,
                     )?;
                     page_bitmap.combine(
                         &region.bitmap,
@@ -436,6 +463,7 @@ fn decode_segments(
                     &referred_tables,
                     &page_state.standard_tables,
                     scratch_buffers,
+                    settings,
                 )?;
                 page_state.store_region(seg.header.segment_number, region.bitmap);
             }

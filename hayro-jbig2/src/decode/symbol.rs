@@ -3,6 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use crate::DecodeSettings;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::{Bitmap, WORD_BITS};
 use crate::decode::generic::{decode_bitmap_mmr, parse_adaptive_template_pixels};
@@ -31,6 +32,7 @@ pub(crate) fn decode(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     input_contexts: Option<&RetainedContexts>,
+    settings: &DecodeSettings,
 ) -> Result<SymbolDictionary> {
     let num_new_symbols = header.num_new_symbols;
 
@@ -45,6 +47,7 @@ pub(crate) fn decode(
         height_class_height: 0,
         header,
         standard_tables,
+        settings,
     };
 
     let read_height_class_delta = |ctx: &mut SymbolDecodeContext<'_>| {
@@ -393,7 +396,7 @@ fn decode_aggregation_bitmap(
         header.region_info.y_location,
         header.flags.default_pixel,
     )?;
-    decode_with(decode_ctx, &all_symbols, &header, &mut bitmap)?;
+    decode_with(decode_ctx, &all_symbols, &header, &mut bitmap, ctx.settings)?;
     Ok(bitmap)
 }
 
@@ -434,6 +437,7 @@ struct SymbolDecodeContext<'a> {
     symbols_decoded_count: u32,
     total_width: u32,
     height_class_height: u32,
+    settings: &'a DecodeSettings,
 }
 
 impl SymbolDecodeContext<'_> {

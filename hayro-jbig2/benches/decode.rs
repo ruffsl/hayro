@@ -3,7 +3,7 @@
 use std::fs;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use hayro_jbig2::{DecoderContext, Image};
+use hayro_jbig2::{DecodeSettings, DecoderContext, Image};
 
 struct NullDecoder;
 
@@ -51,8 +51,11 @@ fn bench_decode(c: &mut Criterion) {
 
         group.bench_function(&name, |b| {
             let mut ctx = DecoderContext::default();
+            let settings = DecodeSettings::default();
             b.iter(|| {
-                image.decode_with(&mut NullDecoder, &mut ctx).unwrap();
+                image
+                    .decode_with(&mut NullDecoder, &mut ctx, &settings)
+                    .unwrap();
             });
         });
     }

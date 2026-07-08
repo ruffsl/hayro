@@ -1,14 +1,11 @@
 //! Text region segment parsing and decoding (7.4.3, 6.4).
 
-use alloc::vec;
-use alloc::vec::Vec;
-use core::iter;
-
 use super::{
     AdaptiveTemplatePixel, CombinationOperator, RefinementTemplate, RegionSegmentInfo,
     parse_refinement_at_pixels, parse_region_segment_info,
 };
 use super::{RegionBitmap, generic_refinement};
+use crate::DecodeSettings;
 use crate::ScratchBuffers;
 use crate::arithmetic_decoder::{ArithmeticDecoder, ArithmeticDecoderContext};
 use crate::bitmap::Bitmap;
@@ -17,6 +14,9 @@ use crate::huffman_table::{HuffmanTable, StandardHuffmanTables, TableLine};
 use crate::integer_decoder::IntegerDecoder;
 use crate::reader::Reader;
 use crate::symbol_id_decoder::SymbolIdDecoder;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::iter;
 
 /// Decode a text region segment (6.4).
 pub(crate) fn decode(
@@ -25,6 +25,7 @@ pub(crate) fn decode(
     referred_tables: &[HuffmanTable],
     standard_tables: &StandardHuffmanTables,
     scratch: &mut ScratchBuffers,
+    settings: &DecodeSettings,
 ) -> Result<RegionBitmap> {
     let mut bitmap = Bitmap::new_with(
         header.region_info.width,
@@ -41,6 +42,7 @@ pub(crate) fn decode(
         standard_tables,
         &mut bitmap,
         scratch,
+        settings,
     )?;
 
     Ok(RegionBitmap {
@@ -56,12 +58,13 @@ pub(crate) fn decode_into(
     standard_tables: &StandardHuffmanTables,
     bitmap: &mut Bitmap,
     scratch: &mut ScratchBuffers,
+    settings: &DecodeSettings,
 ) -> Result<()> {
     if header.flags.use_huffman {
         let mut reader = Reader::new(header.data);
         let ctx =
             DecodeContext::new_huffman(&mut reader, header, referred_tables, standard_tables)?;
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(ctx, symbols, header, bitmap, settings)?;
     } else {
         let mut decoder = ArithmeticDecoder::new(header.data);
 
@@ -76,7 +79,7 @@ pub(crate) fn decode_into(
             .resize(num_gr_contexts, ArithmeticDecoderContext::default());
 
         let ctx = DecodeContext::new_arithmetic(&mut decoder, &mut contexts, &mut scratch.contexts);
-        decode_with(ctx, symbols, header, bitmap)?;
+        decode_with(ctx, symbols, header, bitmap, settings)?;
     }
 
     Ok(())
@@ -88,13 +91,11 @@ pub(crate) fn decode_with(
     symbols: &[&Bitmap],
     header: &TextRegionHeader<'_>,
     region: &mut Bitmap,
+    settings: &DecodeSettings,
 ) -> Result<()> {
     let strip_size = header.strip_size();
 
-    // Arbitrarily chosen, but we need some limit to prevent timeouts.
-    const MAX_INSTANCES: u32 = 10_000;
-
-    if header.num_instances > MAX_INSTANCES {
+    if header.num_instances > settings.max_symbol_instances.unwrap_or(u32::MAX) {
         bail!(SymbolError::TooManyInstances);
     }
 

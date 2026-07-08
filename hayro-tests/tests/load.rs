@@ -1,7 +1,7 @@
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::render_pdf;
-use hayro_jbig2::DecoderContext;
-use hayro_jpeg2000::{DecodeSettings, Image};
+use hayro_jbig2::{DecodeSettings as Jbig2DecodeSettings, DecoderContext};
+use hayro_jpeg2000::{DecodeSettings as Jpeg2000DecodeSettings, Image};
 use hayro_syntax::Pdf;
 use hayro_syntax::metadata::Metadata;
 use hayro_syntax::object::DateTime;
@@ -24,14 +24,15 @@ fn load_jbig2(file: &[u8]) {
 
     if let Ok(image) = hayro_jbig2::Image::new(file) {
         let mut ctx = DecoderContext::default();
-        let _ = image.decode_with(&mut NullDecoder, &mut ctx);
+        let settings = Jbig2DecodeSettings::default();
+        let _ = image.decode_with(&mut NullDecoder, &mut ctx, &settings);
     }
 }
 
 fn load_jpeg2000(file: &[u8]) {
     use image::ImageDecoder;
 
-    let settings = DecodeSettings::default();
+    let settings = Jpeg2000DecodeSettings::default();
     if let Ok(image) = Image::new(file, &settings) {
         let mut buf = vec![0_u8; image.total_bytes() as usize];
         let _ = image.read_image(&mut buf);
